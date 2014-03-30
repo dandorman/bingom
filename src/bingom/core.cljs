@@ -24,10 +24,12 @@
   (reify
     om/IInitState
     (init-state [_]
-      {:toggle (chan)})
+      {:toggle (chan)
+       :bingo? (chan)})
     om/IWillMount
     (will-mount [_]
-      (let [toggle (om/get-state owner :toggle)]
+      (let [toggle (om/get-state owner :toggle)
+            bingo? (om/get-state owner :bingo?)]
         (go (loop []
               (let [number (<! toggle)]
                 (om/transact! app :rows
@@ -35,12 +37,37 @@
                                 (map (fn [row]
                                        (map (fn [[n checked]]
                                               (cond
-                                                (= n "FREE") [n true]
+                                                (= n "FREE") (do (put! bingo? true) [n true])
                                                 (= n number) [n (not checked)]
                                                 :else        [n checked]))
                                             row))
                                      rows)))
-                (recur))))))
+                (recur))))
+        (go (loop []
+              (let [_ (<! bingo?)]
+                (om/transact! app :rows
+                              (fn [rows]
+                                (if (some (fn [row]
+                                            (every? (fn [[_ checked]] checked)
+                                                    row))
+                                          rows)
+                                  (js/alert "Bingo!"))
+                                (let [columns (apply mapv vector rows)]
+                                  (if (some (fn [column]
+                                              (every? (fn [[_ checked]] checked)
+                                                      column))
+                                            columns)
+                                    (js/alert "Bingo!")))
+                                (let [diagonal (for [x (range (count (first rows)))]
+                                                 (nth (nth rows x) x))]
+                                  (if (every? (fn [[_ checked]] checked) diagonal)
+                                    (js/alert "Bingo!")))
+                                (let [diagonal (for [x (range (count (first rows)))]
+                                                 (nth (reverse (nth rows x)) x))]
+                                  (if (every? (fn [[_ checked]] checked) diagonal)
+                                    (js/alert "Bingo!")))
+                                rows)))
+              (recur)))))
     om/IRenderState
     (render-state [this {:keys [toggle]}]
       (dom/table nil
