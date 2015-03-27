@@ -13,7 +13,7 @@
                  [[13] [21] [37] [53] [72]]]))
 
 (defn bingo? [numbers]
-  (every? (fn [[_ checked]] checked) numbers))
+  (every? second numbers))
 
 (defn some-bingo? [rows]
   (let [columns (apply mapv vector rows)
@@ -32,7 +32,7 @@
 (defmulti bingo-cell (fn [[content _] _] (= "FREE" content)))
 
 (defmethod bingo-cell true
-  [_]
+  [& _]
   (reify
     om/IRender
     (render [_]
