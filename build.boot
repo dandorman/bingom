@@ -10,3 +10,8 @@
 (deftask build
   []
   (cljs.closure/build "src" {:output-to "out/main.js"}))
+
+(deftask witch
+  []
+  (cljs.closure/watch "src" {:main 'bingom.core
+                             :output-to "out/main.js"}))
