@@ -29,14 +29,22 @@
              (when (some-bingo? new-card)
                (.setTimeout js/window #(js/alert "BINGO!") 100))))
 
-(defn bingo-cell [[number checked :as cell] owner]
+(defmulti bingo-cell (fn [[content _] _] (= "FREE" content)))
+
+(defmethod bingo-cell true
+  [_]
+  (reify
+    om/IRender
+    (render [_]
+      (dom/td #js {:className "checked"} "FREE"))))
+
+(defmethod bingo-cell false
+  [[number checked :as cell] owner]
   (reify
     om/IRender
     (render [_]
       (dom/td #js {:className (when checked "checked")
-                   :onClick (fn [_]
-                              (when-not (= "FREE" number)
-                                (om/transact! cell 1 #(not checked))))}
+                   :onClick (fn [_] (om/transact! cell 1 #(not checked)))}
               number))))
 
 (defn bingo-card [card owner]
