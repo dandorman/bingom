@@ -1,67 +1,48 @@
 (ns bingom.core
   (:require-macros [cljs.core.async.macros :refer [go]])
   (:require [om.core :as om :include-macros true]
-            [om.dom :as dom :include-macros true]
-            [cljs.core.async :refer [put! chan <!]]))
+            [om.dom :as dom :include-macros true]))
 
 (enable-console-print!)
 
-(def app-state (atom {:rows [[[8] [19] [39] [55] [73]]
-                             [[2] [17] [31] [51] [62]]
-                             [[15] [23] ["FREE", true] [47] [64]]
-                             [[9] [18] [44] [60] [70]]
-                             [[13] [21] [37] [53] [72]]]}))
+(def free ["FREE", true])
+(def card (atom [[[ 8] [19] [39] [55] [73]]
+                 [[ 2] [17] [31] [51] [62]]
+                 [[15] [23] free [47] [64]]
+                 [[ 9] [18] [44] [60] [70]]
+                 [[13] [21] [37] [53] [72]]]))
 
 (defn bingo? [numbers]
   (every? (fn [[_ checked]] checked) numbers))
 
-(defn bingo-cell [[number checked] owner]
+(defn some-bingo? [rows]
+  (let [columns (apply mapv vector rows)
+        tl->br (for [x (range (count (first rows)))]
+                 (nth (nth rows x) x))
+        rt->bl (for [x (range (count (first rows)))]
+                 (nth (reverse (nth rows x)) x))
+        chances (concat rows columns [tl->br rt->bl])]
+    (some #(bingo? %) chances)))
+
+(add-watch card :check-bingo
+           (fn [_ _ _ new-card]
+             (when (some-bingo? new-card)
+               (.setTimeout js/window #(js/alert "BINGO!") 100))))
+
+(defn bingo-cell [[number checked :as cell] owner]
   (reify
-    om/IRenderState
-    (render-state [this {:keys [toggle]}]
+    om/IRender
+    (render [_]
       (dom/td #js {:className (when checked "checked")
-                   :onClick (fn [e] (put! toggle number))}
+                   :onClick (fn [_]
+                              (when-not (= "FREE" number)
+                                (om/transact! cell 1 #(not checked))))}
               number))))
 
-(defn bingo-card [app owner]
+(defn bingo-card [card owner]
   (reify
-    om/IInitState
-    (init-state [_]
-      {:toggle (chan)
-       :check-for-bingo (chan)})
-    om/IWillMount
-    (will-mount [_]
-      (let [toggle (om/get-state owner :toggle)
-            check-for-bingo (om/get-state owner :check-for-bingo)]
-        (go (loop []
-              (let [number (<! toggle)]
-                (om/transact! app :rows
-                              (fn [rows]
-                                (map (fn [row]
-                                       (map (fn [[n checked]]
-                                              (cond
-                                                (= n "FREE") (do (put! check-for-bingo true) [n true])
-                                                (= n number) [n (not checked)]
-                                                :else        [n checked]))
-                                            row))
-                                     rows)))
-                (recur))))
-        (go (loop []
-              (let [_ (<! check-for-bingo)]
-                (om/transact! app :rows
-                              (fn [rows]
-                                (let [columns (apply mapv vector rows)
-                                      tl->br (for [x (range (count (first rows)))]
-                                                 (nth (nth rows x) x))
-                                      rt->bl (for [x (range (count (first rows)))]
-                                                 (nth (reverse (nth rows x)) x))
-                                      chances (concat rows columns [tl->br rt->bl])]
-                                  (if (some #(bingo? %) chances)
-                                    (js/alert "Bingo!")))
-                                rows)))
-              (recur)))))
-    om/IRenderState
-    (render-state [this {:keys [toggle]}]
+    om/IRender
+    (render [_]
       (dom/table nil
                  (dom/thead nil
                             (apply dom/tr nil
@@ -69,9 +50,8 @@
                  (apply dom/tbody nil
                         (map (fn [numbers]
                                (apply dom/tr nil
-                                      (om/build-all bingo-cell numbers
-                                                    {:init-state {:toggle toggle}})))
-                             (:rows app)))))))
+                                      (om/build-all bingo-cell numbers)))
+                             card))))))
 
-(om/root bingo-card app-state
-         {:target (. js/document (getElementById "bingo"))})
+(om/root bingo-card card
+         {:target (.getElementById js/document "bingo")})
